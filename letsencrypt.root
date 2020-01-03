@@ -6,15 +6,18 @@
 FOLDER="/root/letsencrypt"
 
 echo "Creates a little letsencrypt environment in '$FOLDER' with instructions and checks."
-echo "Requires 'bc' command installed."
+echo "Requires bc, certbot and certbot-apache module installed."
 echo "Run as root."
 read -p "Press [Enter] to continue or Ctrl+C to exit... "
 
 
 # Check dependencies
 command -v bc >/dev/null 2>&1 || { echo >&2 "program bc needed. Install first."; exit 1; }
-#pacman --needed -S bc
-
+command -v certbot >/dev/null 2>&1 || { echo >&2 "program certbot needed. Install first."; exit 1; }
+#pacman --needed -S bc certbot certbot-apache
+#apt-get install bc certbot python-certbot-apache
+#dnf install bc certbot python2-certbot-apache
+#yum install bc
 
 # === Start install
 
