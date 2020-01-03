@@ -1,0 +1,87 @@
+#!/bin/bash
+# Adrian Sausenthaler
+# https://github.com/sausix/install-scripts
+
+# Settings
+FOLDER="/root/letsencrypt"
+
+echo "Creates a little letsencrypt environment in '$FOLDER' with instructions and checks."
+echo "Requires 'bc' command installed."
+echo "Run as root."
+read -p "Press [Enter] to continue or Ctrl+C to exit... "
+
+
+# Check dependencies
+command -v bc >/dev/null 2>&1 || { echo >&2 "program bc needed. Install first."; exit 1; }
+#pacman --needed -S bc
+
+
+# === Start install
+
+# Create folder
+mkdir -p $FOLDER
+
+# File "check"
+cat << 'EOF' > $FOLDER/check
+#!/bin/bash
+# Check all certificates
+FOLDER="/etc/letsencrypt/live/"
+FOLDERS=$(find $FOLDER -mindepth 1 -type d)
+
+for CDIR in $FOLDERS
+do
+        echo "$CDIR:"
+        openssl x509 -enddate -noout -in "$CDIR/cert.pem"
+        EXPIRE_DATE=$(openssl x509 -in "$CDIR/cert.pem" -noout -enddate | cut -d = -f 2)
+        DAYS_LEFT=$(echo "(" $(date -d "${EXPIRE_DATE}" +%s) - $(date +%s) ")" / 86400 | bc)
+        echo "$DAYS_LEFT days left"
+done 
+EOF
+chmod +x $FOLDER/check
+
+# File "checkupdate"
+cat << 'EOF' > $FOLDER/checkupdate
+#!/bin/bash
+# Check all certificates and call certbot only when needed.
+# Should reduce renews and avoid email notifications. 
+FOLDER="/etc/letsencrypt/live"
+echo "-- $(date) --"
+
+cd $FOLDER
+
+for DOMAIN in *
+do
+        echo "$DOMAIN"
+        CERTPEM="$DOMAIN/cert.pem"
+        openssl x509 -enddate -noout -in "$CERTPEM"
+        EXPIRE_DATE=$(openssl x509 -in "$CERTPEM" -noout -enddate | cut -d = -f 2)
+        DAYS_LEFT=$(echo "(" $(date -d "${EXPIRE_DATE}" +%s) - $(date +%s) ")" / 86400 | bc)
+        if [ "$DAYS_LEFT" -lt "25" ]; then
+                echo "Renewing..."
+                /usr/bin/certbot --apache certonly -n -d $DOMAIN
+        else
+                echo "No renew needed. Valid days left: $DAYS_LEFT"
+        fi
+done
+EOF
+chmod +x $FOLDER/checkupdate
+
+# Create little instructions
+cat << 'EOF' > $FOLDER/instructions
+Register new account:
+certbot --register
+
+# Add a new cert
+# Disable vhost first
+certbot certonly --apache -d domain.com [-d other.domain]
+
+# Add subdomains later
+certbot certonly --apache --cert-name domain.com -d domain.com -d www.domain.com
+
+# Update
+/usr/bin/certbot --apache certonly -n -d domain.com
+
+# Crontab
+# minute hour    day_of_month    month   day_of_week     command
+0        4       *               *       *               /root/letsencrypt/checkupdate >> /root/letsencrypt/update.log  # certbot-check
+EOF
